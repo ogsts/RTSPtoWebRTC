@@ -9,9 +9,7 @@ import (
 	"log"
 	"sync"
 	"time"
-
 	"github.com/deepch/vdk/codec/h264parser"
-
 	"github.com/deepch/vdk/av"
 )
 
@@ -52,7 +50,7 @@ type viewer struct {
 	c chan av.Packet
 }
 
-func (element *ConfigST) RunIFNotRun(uuid string) {
+func (element *ConfigST) startRtspStreamIfNeeded(uuid string) {
 	element.mutex.Lock()
 	defer element.mutex.Unlock()
 	if tmp, ok := element.Streams[uuid]; ok {
@@ -115,6 +113,7 @@ func (element *ConfigST) GetWebRTCPortMax() uint16 {
 }
 
 func loadConfig() *ConfigST {
+	log.Println("#-> loadConfig")
 	var tmp ConfigST
 	data, err := ioutil.ReadFile("config.json")
 	if err == nil {
@@ -142,6 +141,7 @@ func loadConfig() *ConfigST {
 
 		tmp.Streams = make(map[string]StreamST)
 	}
+	log.Println("<-# loadConfig")
 	return &tmp
 }
 
@@ -162,7 +162,7 @@ func (element *ConfigST) ext(suuid string) bool {
 	return ok
 }
 
-func (element *ConfigST) coAd(suuid string, codecs []av.CodecData) {
+func (element *ConfigST) codecDataSet(suuid string, codecs []av.CodecData) {
 	element.mutex.Lock()
 	defer element.mutex.Unlock()
 	t := element.Streams[suuid]
@@ -170,12 +170,14 @@ func (element *ConfigST) coAd(suuid string, codecs []av.CodecData) {
 	element.Streams[suuid] = t
 }
 
-func (element *ConfigST) coGe(suuid string) []av.CodecData {
+func (element *ConfigST) codecDataGet(suuid string) []av.CodecData {
+	log.Println("#-> codecDataGet")
 	for i := 0; i < 100; i++ {
 		element.mutex.RLock()
 		tmp, ok := element.Streams[suuid]
 		element.mutex.RUnlock()
 		if !ok {
+			log.Println("<-# codecDataGet not ok")
 			return nil
 		}
 		if tmp.Codecs != nil {
@@ -185,7 +187,7 @@ func (element *ConfigST) coGe(suuid string) []av.CodecData {
 					codecVideo := codec.(h264parser.CodecData)
 					if codecVideo.SPS() != nil && codecVideo.PPS() != nil && len(codecVideo.SPS()) > 0 && len(codecVideo.PPS()) > 0 {
 						//ok
-						//log.Println("Ok Video Ready to play")
+						log.Println("Ok Video Ready to play")
 					} else {
 						//video codec not ok
 						log.Println("Bad Video Codec SPS or PPS Wait")
@@ -194,14 +196,17 @@ func (element *ConfigST) coGe(suuid string) []av.CodecData {
 					}
 				}
 			}
+			log.Println("<-# codecDataGet")
 			return tmp.Codecs
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	
+	log.Println("<-# codecDataGet")
 	return nil
 }
 
-func (element *ConfigST) clAd(suuid string) (string, chan av.Packet) {
+func (element *ConfigST) clientAdd(suuid string) (string, chan av.Packet) {
 	element.mutex.Lock()
 	defer element.mutex.Unlock()
 	cuuid := pseudoUUID()
@@ -223,7 +228,7 @@ func (element *ConfigST) list() (string, []string) {
 	}
 	return fist, res
 }
-func (element *ConfigST) clDe(suuid, cuuid string) {
+func (element *ConfigST) clientDelete(suuid, cuuid string) {
 	element.mutex.Lock()
 	defer element.mutex.Unlock()
 	delete(element.Streams[suuid].Cl, cuuid)
